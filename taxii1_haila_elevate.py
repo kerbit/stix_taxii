@@ -63,6 +63,7 @@ def get_id_idref_relations(full_file_names):
 	# pprint.pprint(id_idref_relations)
 	return id_idref_relations
 
+# get_id_idref_relations_1() + sub-directory traverse
 def get_id_idref_relations_2(full_file_names):
 	id_idref_relations = dict()
 	for sub_file_name in full_file_names:
@@ -94,11 +95,14 @@ def get_id_idref_relations_2(full_file_names):
 	return id_idref_relations
 
 def get_final_relations(id_idref_relations):
+	relations_total_len = len(id_idref_relations)
 	relations = dict()
-	for id in id_idref_relations:
+
+	for id, cnt in zip(id_idref_relations, range(relations_total_len)):
 		if "indicator" in id:
 			indicated_ids = dict()
-			# print("Indicator_ID:", id)
+			indicated_ids['observable'] = []
+			indicated_ids['ttp'] = []
 
 			# INDICATOR'S RELATION
 			for id_ref in id_idref_relations[id]:
@@ -107,21 +111,21 @@ def get_final_relations(id_idref_relations):
 
 					# COMPOSITE OBSERVABLES
 					if child_observables:
-						indicated_ids['observable_ref'] = id_ref
-						# print("\tObservables_ID:", id_ref)
-						indicated_ids['observables'] = child_observables
-						# for child_observable in child_observables:
-							# print("\t\tObservable_ID:", child_observable)
+						indicated_ids['observable'].append({
+							"o_ref": id_ref,
+							"o": [x for x in child_observables]
+						})
 						
 					# NOT COMPOSITE OBSERVABLES
 					else:
-						indicated_ids['observable_ref'] = ""
-						indicated_ids['observables'] = [id_ref]
+						indicated_ids['observable'].append({
+							"o_ref": "",
+							"o": [id_ref]
+							})
 
 				elif "ttp" in id_ref:
-					indicated_ids['ttp'] = id_ref
-					# print("\tttp_ID:", id_ref)
-					# 
+					indicated_ids['ttp'].append(id_ref)
+
 			relations[id] = indicated_ids
 	return relations
 
@@ -294,99 +298,97 @@ def set_observable_ref_content(package_body, observable_ref_fractions):
 	return p_body
 
 def dir_1_main(is_preprocessed):
-	for collection_dir, idx in zip(collection_dirs_1, range(len(collection_dirs_1))):
+	for collection_dir, collection_idx in zip(collection_dirs_1, range(len(collection_dirs_1))):
+		print("#{}: ".format(collection_idx + 1) + collection_dir)
 		full_file_names = search(collection_dir)
-		print("#{}: ".format(idx + 1) + collection_dir)
-		print("[MAKE_RELATIONS] file #: {}".format(len(full_file_names)))
+		print("[MAKE_RELATIONS] file #: approximately {}".format(len(full_file_names) * 10000))
 
 		preprocessed_relations = None
 		if not is_preprocessed:
 			preprocessed_relations = preprocess(full_file_names)
-			with open("D:/stix2_data/relations/" + collection_dir.split("/")[-1] + "_relation.txt", "wb") as f:
-				pickle.dump(preprocessed_relations, f)
+			with open("D:/stix2_data/relations/" + collection_dir.split("/")[-1] + "_relation.txt", "w") as f:
+				json.dump(preprocessed_relations, f)
 		else:
-			with open("D:/stix2_data/relations/" + collection_dir.split("/")[-1] + "_relation.txt", "rb") as f:
-				preprocessed_relations = pickle.load(f)
-
+			with open("D:/stix2_data/relations/" + collection_dir.split("/")[-1] + "_relation.txt", "r") as f:
+				preprocessed_relations = json.load(f)
 		print("[READ_RELATIONS] relation #: {}".format(len(preprocessed_relations)))
+
+		temp_dir_name = collection_dir.split("/")[-1].split(".")[-1] + "_stix1"
 		temp_prg = -1
 		for indicator, idx in zip(preprocessed_relations, range(len(preprocessed_relations))):
 			# PROGRESS STATUS
 			prg = 100 * (idx + 1) // len(preprocessed_relations)
 			if prg != temp_prg and prg % 5 == 0:
-				print("{}% DONE ({})".format(prg, datetime.datetime.now()))
+				print("{}% DONE ({}/{}) ({})".format(prg, idx, len(preprocessed_relations), datetime.datetime.now()))
 				temp_prg = prg
 
 			# FIND FILES
 			relation = preprocessed_relations[indicator]
 
 			indicator_id = indicator
-			observable_ref = relation['observable_ref']
-			observables = relation['observables']
-			ttp_id = relation['ttp']
+			ttp_ids = relation['ttp']
+			observable_ids = relation['observable']
 
 			indicator_file = collection_dir + "/" + indicator_id
+			ttp_files = [collection_dir + "/" + x for x in ttp_ids]
+
+			observable_ref_files = []
+			observable_files = []
+			for observable_id in observable_ids:
+				if observable_id.get('o_ref', False):
+					observable_ref_files.append(collection_dir + "/" + observable_id['o_ref'])
+				for o in observable_id.get('o', []):
+					observable_files.append(collection_dir + "/" + o)
 			
-			if observable_ref: # COMPOSTIE OBSERVABLES
-				observable_ref_file = collection_dir + "/" + observable_ref
-			else: # NO COMPOSITE OBSERVABLES
-				observable_ref_file = ""
+			ns_fractions = []
+			ttp_fractions = ""
+			observable_fractions =""
+			observable_ref_fractions = []
 
-			observable_files = [collection_dir + "/" + x for x in observables]
-			ttp_file = collection_dir + "/" + ttp_id
-			
-			needed_files = [observable_ref_file, ttp_file] + observable_files
-			if do_files_exist(needed_files):
-				ns_fractions = []
-
-				ttp_fraction = ""
-				observable_ref_fraction = ""
-				observable_fraction =""
-
+			try:
 				# TTP_FRACTION
-				ttp_ns, ttp_fraction = get_ttp_fraction(ttp_file)
-				# ns_fractions.append(ttp_ns)
+				ttp_fractions += "\n\t<stix:TTPs>"
+				for ttp_file in ttp_files:
+					ttp_ns, ttp_fraction = get_ttp_fraction(ttp_file)
+					ttp_fractions += ttp_fraction + "\n"
+				ttp_fractions += "\n\t</stix:TTPs>"
 
-				# OBSERVABLE_COMPOSITION_FRACTION
-				observable_ref_fraction = get_observable_ref_fraction(observable_ref_file)
-				
 				# OBSERVABLE_FRACTIONS
 				for observable_file in observable_files:
-					observable_ns, observable_temp_fraction = get_observable_fraction(observable_file, is_first=False if observable_fraction else True)					
+					observable_ns, observable_fraction = get_observable_fraction(observable_file, is_first=False if observable_fractions else True)					
 					ns_fractions.append(observable_ns)
-					observable_fraction += observable_temp_fraction + "\n"
-				observable_fraction += "\n\t</stix:Observables>"
+					observable_fractions += "\t" + observable_fraction
+				observable_fractions += "\t</stix:Observables>"
 
-				fractions = "\n" + ttp_fraction + "\n" + observable_ref_fraction + "\n" + observable_fraction
-				fractions += "\n" + "</stix:STIX_Package>"
-				ns_fractions = " " + " ".join(list(set(ns_fractions))) + ">\n"
+				# OBSERVABLE_COMPOSITION_FRACTION
+				for observable_ref_file in observable_ref_files:
+					observable_ref_file_name = observable_ref_file.split("/")[-1][:-4]
+					observable_ref_fractions.append((observable_ref_file_name, get_observable_ref_fraction(observable_ref_file)))
+			except Exception as e:
+				print(e)
+				continue
 
-				# MAKE FINAL
-				package_head, package_body = get_indicator_content(indicator_file)
-				new_package_head = package_head + ns_fractions
-				new_package_body = package_body + fractions
-				new_package = new_package_head + new_package_body
-				# print(new_package)
+			fractions = "\n" + ttp_fractions + "\n" + observable_fractions
+			fractions += "\n" + "</stix:STIX_Package>"
+			ns_fractions = " " + " ".join(list(set(ns_fractions))) + ">\n"
 
-				temp_file_name = "D:/stix2_data/" + collection_dir.split("/")[-1] + ".xml"
-				with open(temp_file_name, "w") as f:
-					f.write(new_package)
+			# MAKE FINAL
+			package_head, package_body = get_indicator_content(indicator_file)
 
-				proc = subprocess.Popen(["stix2_elevator", "-d DISABLE", "-s", temp_file_name], stdout=subprocess.PIPE, shell=True)
-				out, err = proc.communicate()
+			if observable_ref_fractions:
+				package_body = set_observable_ref_content(package_body, observable_ref_fractions)
+			new_package_head = package_head + ns_fractions
+			new_package_body = package_body + fractions
+			new_package = new_package_head + new_package_body
 
-				match = re.compile(r"{.*", re.DOTALL).findall(out.decode("UTF-8"))
-				if match:
-					stix2_data = json.loads(match[0])
-					stix2_id = stix2_data['id']
-					
-					result_file_name = "D:/stix2_data/collections/" + collection_dir.split("/")[-1] + "/" + stix2_id
-					with open(result_file_name, "w") as f:
-						f.write(match[0])
-				else:
-					print("\t[WARNING] {} is passed. Conversion failed".format(indicator_id))
-			else:
-				print("\t[WARNING] {} is passed. Something is missing".format(indicator_id))
+			# MAKE DIRECTORY
+			temp_dir =  "D:/stix2_data/" + temp_dir_name + "/"
+			new_temp_dir = temp_dir + str(idx // 10000).zfill(4)
+			if idx % 10000 == 0:
+				Path(new_temp_dir).mkdir(parents=True, exist_ok=True)
+			temp_file = new_temp_dir + "/" + str(idx) + ".xml"
+			with open(temp_file, "w") as f:
+				f.write(new_package)
 		print()
 
 def dir_2_main(is_preprocessed):
@@ -483,22 +485,6 @@ def dir_2_main(is_preprocessed):
 			temp_file = new_temp_dir + "/" + str(idx) + ".xml"
 			with open(temp_file, "w") as f:
 				f.write(new_package)
-			
-			# CONVERT CODE START
-			# proc = subprocess.Popen(["stix2_elevator", "-d DISABLE", "-s", temp_file_name], stdout=subprocess.PIPE, shell=True)
-			# out, err = proc.communicate()
-
-			# match = re.compile(r"{.*", re.DOTALL).findall(out.decode("UTF-8"))
-			# if match:
-			# 	stix2_data = json.loads(match[0])
-			# 	stix2_id = stix2_data['id']
-				
-			# 	result_file_name = "D:/stix2_data/collections/" + collection_dir.split("/")[-1] + "/" + stix2_id
-			# 	with open(result_file_name, "w") as f:
-			# 		f.write(match[0])
-			# else:
-			# 	print("\t[WARNING] {} is passed. Conversion failed".format(indicator_id))
-			# CONVERT CODE END
 		print()
 
 def main():
