@@ -301,7 +301,7 @@ def dir_1_main(is_preprocessed):
 	for collection_dir, collection_idx in zip(collection_dirs_1, range(len(collection_dirs_1))):
 		print("#{}: ".format(collection_idx + 1) + collection_dir)
 		full_file_names = search(collection_dir)
-		print("[MAKE_RELATIONS] file #: approximately {}".format(len(full_file_names) * 10000))
+		print("[MAKE_RELATIONS] file #: approximately {}".format(len(full_file_names)))
 
 		preprocessed_relations = None
 		if not is_preprocessed:
@@ -489,12 +489,12 @@ def dir_2_main(is_preprocessed):
 
 def main():
 	print("-"*20 + "dir_1 main START" + "-"*20)
-	# dir_1_main(is_preprocessed=True)
+	dir_1_main(is_preprocessed=False)
 	print("-"*21 + "dir_1 main END" + "-"*21)
 	print()
 
 	print("-"*20 + "dir_2 main START" + "-"*20)
-	dir_2_main(is_preprocessed=False)
+	# dir_2_main(is_preprocessed=False)
 	print("-"*21 + "dir_2 main END" + "-"*21)
 	print()
 
