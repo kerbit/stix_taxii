@@ -1,15 +1,14 @@
 """
-MITRE FEED
+LIMO FEED
  - TAXII 2.0
- - https://cti-taxii.mitre.org/taxii/
- - LATEST: 2019-10-23T14:26:33.079Z
+ - https://limo.anomali.com/api/v1/taxii2/taxii/
+ - OLDEST: 2016-02-26 18:10:27.380000+00:00
 """ 		
 
-from stix2 import TAXIICollectionSource
+from stix2 import TAXIICollectionSource, Filter
 from stix2.workbench import *
 from taxii2client import Server, Collection
 from collections import Counter
-from stix2 import Filter
 
 from stix2.v20.sdo import *
 from stix2.v21.sdo import *
@@ -17,6 +16,7 @@ from stix2.v21.sdo import *
 import pprint
 import pymysql
 import datetime
+import json
 
 db = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='yeonseok', db='stix2', charset='utf8')
 cur = db.cursor()
@@ -83,7 +83,7 @@ db_format = {
  		'kill_chain_phases', 
  		'tool_version'],
  'vulnerability': ['name', 
- 					# 'description'
+ 					'description'
  					]
  }
 
@@ -100,7 +100,7 @@ def server_info(server):
 	print()
 
 	return server_info
-	
+
 def api_roots_info(api_roots):
 	api_roots_info = dict()
 	for api_root in api_roots:
@@ -211,8 +211,8 @@ def check_stix_object_type():
 
 	return types
 
-def make_mitre_taxii_client():
-	s = Server("https://cti-taxii.mitre.org/taxii/")
+def make_limo_taxii_client():
+	s = Server("https://limo.anomali.com/api/v1/taxii2/taxii/", user='guest', password='guest')
 	return s
 
 def get_api_roots(client):
@@ -226,95 +226,14 @@ def get_collections(api_roots):
 			print("\tCOLLECTION:", c.title)
 			c_info = collection_info(c)
 
-			tc_source = TAXIICollectionSource(c)
-			add_data_source(tc_source)
-			stix_objects = check_stix_object_type()
-			print("\t\tDATA =>", list(stix_objects.keys()) , end='\n')
-
-			# SRO
-			_objects = c.get_objects()
-			objects = _objects['objects']
-			for o in objects:
-				if o['type'] == 'relationship':
-						sql = """
-								INSERT IGNORE INTO sro_relationship(source_ref, target_ref, relationship_type)
-						 		values (%s, %s, %s)
-						 	  """
-						cur.execute(sql, (o['source_ref'], o['target_ref'], o['relationship_type']))
-						db.commit()
-
-
-			# SDO
-			for stix_object_type in stix_objects:
-				print("\t\t\t", stix_object_type, len(stix_objects[stix_object_type]))
-				for o in stix_objects[stix_object_type]:
-					TYPE = str(type(o))
-					# 
-					cols = []
-					table = "sdo_"
-					if "AttackPattern" in TYPE:
-						cols = db_format['attack_pattern']
-						table += 'attack_pattern'
-
-					elif "Campaign" in TYPE:
-						cols = db_format['campaign']
-						table += 'campaign'
-
-					elif "CourseOfAction" in TYPE:
-						cols = db_format['course_of_action']
-						table += 'course_of_action'
-
-					elif "Identity" in TYPE:
-						cols = db_format['identity']
-						table += 'identity'
-
-					elif "Indicator" in TYPE:
-						cols = db_format['indicator']
-						table += 'indicator'
-
-					elif "IntrusionSet" in TYPE:
-						cols = db_format['intrusion_set']
-						table += 'intrusion_set'
-
-					elif "Malware" in TYPE:
-						cols = db_format['malware']
-						table += 'malware'
-
-					elif "ObservedData" in TYPE:
-						cols = db_format['observed_data']
-						table += 'observed_data'
-
-					elif "Report" in TYPE:
-						cols = db_format['report']
-						table += 'report'
-
-					elif "ThreatActor" in TYPE:
-						cols = db_format['threat_actor']
-						table += 'threat_actor'
-
-					elif "Tool" in TYPE:
-						cols = db_format['tool']
-						table += 'tool'
-
-					elif "Vulnerability" in TYPE:
-						cols = db_format['vulnerability']
-						table += 'vulnerability'
-
-					else:
-						continue
-
-					sql = "INSERT IGNORE INTO %s (%s) VALUES(%s)" % (
-						table, 
-						", ".join(cols + db_format['common']), 
-						", ".join(["\"" + pymysql.escape_string(str(o.get(c, "None"))) + "\"" for c in cols + db_format['common']]))
-
-					cur.execute(sql)
-					db.commit()
+			response = c.get_objects()
+			with open("D:/stix2_data_limo/" + c.title + '.json', "w") as f:
+				json.dump(response, f)
 					
 def main():
 	# MAKE CLIENT
 	print("MAKE CLIENT")
-	client = make_mitre_taxii_client()
+	client = make_limo_taxii_client()
 	s_info = server_info(client)
 
 	# GET API ROOTS

@@ -237,7 +237,6 @@ def get_collections(api_roots):
 						cur.execute(sql, (o['source_ref'], o['target_ref'], o['relationship_type']))
 						db.commit()
 
-
 			# SDO
 			for stix_object_type in stix_objects:
 				print("\t\t\t", stix_object_type, len(stix_objects[stix_object_type]))
